@@ -1,12 +1,11 @@
 
 
-from getpass import getpass
 from datetime import datetime
 
 from greencart import storage
 from greencart.models import Customer, Product
 from greencart.utils import (
-    password, verify_password, calculate_order_total, is_valid_order,
+    hash_password, verify_password, calculate_order_total, is_valid_order,
     to_safe_float, to_safe_int, format_price_for_display, categorize_products,
     find_low_stock_products, search_products_by_keyword, unique_categories,
     top_n_products_by_value,
@@ -22,10 +21,7 @@ def ask(prompt):
 
 
 def ask_password(prompt="Password: "):
-    try:
-        return getpass(prompt)
-    except Exception:
-        return input(prompt)
+    return input(prompt).strip()
 
 
 def pause():
@@ -37,13 +33,15 @@ def heading(title):
 
 
 
+
 class GreenCartApp:
 
-    def _init_(self):
+    def __init__(self):
         storage.seed_default_data()
         self.users = storage.load_users()          
         self.products = storage.load_products()    
         self.current_user = None
+
 
 
     def find_product(self, product_id):
@@ -60,6 +58,7 @@ class GreenCartApp:
         print(LINE)
         for p in products:
             print(f"{p.id:<5}{p.name:<24}{p.category:<14}{p.price:>10.2f}{p.quantity:>6}")
+
 
 
     def register(self):
@@ -80,19 +79,19 @@ class GreenCartApp:
             print("Passwords do not match.")
             return
 
-        self.users[username] = Customer(username, password(password))
+        self.users[username] = Customer(username, hash_password(password))
         storage.save_users(self.users)
         print("Account created! You can log in now.")
 
     def login(self):
         heading("LOGIN")
         attempts = 0
-        while attempts < MAX_LOGIN_ATTEMPTS:           
+        while attempts < MAX_LOGIN_ATTEMPTS:          
             username = ask("Username: ")
             password = ask_password()
             user = self.users.get(username)
 
-            if user is not None and verify_password(password, user.password_hash):
+            if user is not None and verify_password(password, user.password):
                 self.current_user = user
                 print(f"\nWelcome, {user.username}! Logged in as {user.role}.")
                 return True
@@ -130,7 +129,7 @@ class GreenCartApp:
         if not is_valid_order(quantity, product.quantity, self.current_user is not None):
             print(f"Invalid quantity. Available stock: {product.quantity}")
             return
-        self.current_user.cart.append((product, quantity))   
+        self.current_user.cart.append((product, quantity))    # tuple stored in list
         print(f"Added {quantity} x {product.name} to cart.")
 
     def view_cart(self):
@@ -139,7 +138,7 @@ class GreenCartApp:
             print("Your cart is empty.")
             return 0.0
         grand_total = 0.0
-        for index, (product, quantity) in enumerate(cart, start=1):   
+        for index, (product, quantity) in enumerate(cart, start=1):   # tuple unpacking
             line_total = calculate_order_total(product.price, quantity)
             grand_total += line_total
             print(f"{index}. {product.name} x {quantity} = {format_price_for_display(line_total)} (incl. 5% tax)")
@@ -157,7 +156,7 @@ class GreenCartApp:
 
         items = []
         for product, quantity in self.current_user.cart:
-            product.quantity -= quantity               
+            product.quantity -= quantity               # reduce stock
             items.append({"product": product.name, "quantity": quantity})
 
         storage.save_products(self.products)
@@ -193,7 +192,7 @@ class GreenCartApp:
         self.run_menu("CUSTOMER MENU", actions, exit_key="8")
 
 
-    def create_product(self):                       
+    def create_product(self):                      
         name = ask("Product name: ")
         price = to_safe_float(ask("Price: "))
         quantity = to_safe_int(ask("Quantity: "), default=-1)
@@ -231,7 +230,7 @@ class GreenCartApp:
         storage.save_products(self.products)
         print(f"Updated: {product}")
 
-    def delete_product(self):                    
+    def delete_product(self):                     
         self.show_products(self.products)
         product = self.find_product(to_safe_int(ask("\nProduct ID to delete: "), default=-1))
         if product is None:
@@ -283,7 +282,7 @@ class GreenCartApp:
                 return
             if choice in actions:
                 print()
-                actions[choice][1]()            
+                actions[choice][1]()              
                 pause()
             else:
                 print("Invalid choice, please try again.")
@@ -310,9 +309,8 @@ class GreenCartApp:
                 print("Invalid choice, please try again.")
 
 
-if __name__ == "_main_":
+if __name__ == "__main__":
     try:
         GreenCartApp().start()
     except KeyboardInterrupt:
         print("\nExiting GreenCart. Bye!")
-
